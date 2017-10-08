@@ -23,7 +23,12 @@
 (add-to-load-path "elisp" "conf" "public_repos")
 ;;ここにlandoflispのファイルとか、elpa,etc,infoも加えた方がいいかも。
 
-;;package.elの設定
+;;C sourceのディレクトリを指定
+(setq find-function-C-source-directory "~/Library/Caches/Homebrew/mituharu-emacs-mac-892fa7b2501a/src")
+
+
+;;Package.Elの設定
+;;M-x package-list-packages
 (when (require 'package nil t)
   ;;パッケージリポジトリにMarmaladeと開発者運営のELPAを追加
   (add-to-list 'package-archives
@@ -50,6 +55,22 @@
 
 
 
+;;-----START(Change save directory auto-save-file and back-up-file))-----
+;; create backup file in ~/.emacs.d/backup
+(setq make-backup-files t)
+(setq backup-directory-alist
+  (cons (cons "\\.*$" (expand-file-name "~/.emacs.d/backup"))
+    backup-directory-alist))
+
+;; create auto-save file in ~/.emacs.d/backup
+(setq auto-save-file-name-transforms
+      `((".*" ,(expand-file-name "~/.emacs.d/backup/") t)))
+
+;;-----END(Change save directory auto-save-file and back-up-file))-----
+
+
+
+
 ;;-----START(DB setting)-----
 
 ;;SQLサーバへ接続するためのデフォルト情報
@@ -59,6 +80,81 @@
 ;      sql-product 'mysql) ;データベースの種類
 
 ;;-----END(DB setting)-----
+
+
+
+;;-----START(file-type-hook Settings)-----
+
+;;.js.erb拡張子のファイルを開いた際に、js-modeがフックされるように設定
+(add-to-list 'auto-mode-alist '("\\.js.erb$" . js-mode))
+;;.haml拡張子のファイルを開いた際に、haml-modeがフックされるように設定
+(add-to-list 'auto-mode-alist '("\\.haml$" . haml-mode))
+;;JavaScriptモードでのインデントの幅をスペース二個分に修正(デフォルトは4個)
+(add-hook 'js-mode-hook
+	  (lambda ()
+	    (make-local-variable 'js-indent-level)
+	    (setq js-indent-level 2)))
+;;Reactを書く際に、.jsや.jsxはweb-modeで編集するように設定(web-modeの細かな設定も記述)
+;; .js, .jsx を web-mode で開く
+(add-to-list 'auto-mode-alist '("\\.js[x]?$" . web-mode))
+;; .scssでもweb-modeで開く
+(add-to-list 'auto-mode-alist '("\\.sass$" . web-mode))
+;; 拡張子 .js でもJSX編集モードに
+(setq web-mode-content-types-alist
+      '(("jsx" . "\\.js[x]?\\'")))
+
+;; インデント
+(add-hook 'web-mode-hook
+          (lambda ()
+             (setq web-mode-attr-indent-offset nil)
+             (setq web-mode-markup-indent-offset 2)
+             (setq web-mode-css-indent-offset 2)
+             (setq web-mode-code-indent-offset 2)
+             (setq web-mode-sql-indent-offset 2)
+             (setq indent-tabs-mode nil)
+             (setq tab-width 2)
+          ))
+;; 色
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(web-mode-comment-face ((t (:foreground "#587F35"))))
+ '(web-mode-css-at-rule-face ((t (:foreground "#DFCF44"))))
+ '(web-mode-css-property-name-face ((t (:foreground "#87CEEB"))))
+ '(web-mode-css-pseudo-class ((t (:foreground "#DFCF44"))))
+ '(web-mode-css-selector-face ((t (:foreground "#DFCF44"))))
+ '(web-mode-css-string-face ((t (:foreground "#D78181"))))
+ '(web-mode-doctype-face ((t (:foreground "#4A8ACA"))))
+ '(web-mode-html-attr-equal-face ((t (:foreground "#FFFFFF"))))
+ '(web-mode-html-attr-name-face ((t (:foreground "#87CEEB"))))
+ '(web-mode-html-attr-value-face ((t (:foreground "#D78181"))))
+ '(web-mode-html-tag-face ((t (:foreground "#4A8ACA"))))
+ '(web-mode-server-comment-face ((t (:foreground "#587F35")))))
+;;閉じタグ関連
+(setq web-mode-auto-close-style 1)
+(setq web-mode-tag-auto-close-style t)
+(setq web-mode-enable-auto-pairing t)
+
+;;rainbow-mode設定
+(require 'rainbow-mode)
+(add-hook 'css-mode-hook 'rainbow-mode)
+(add-hook 'less-mode-hook 'rainbow-mode)
+(add-hook 'web-mode-hook 'rainbow-mode)
+(add-hook 'html-mode-hook 'rainbow-mode)
+
+;;css-mode(cssm-mirror-mode)
+(defun css-mode-hooks ()
+  "css-mode hooks"
+  (setq cssm-indent-function #'cssm-c-style-indenter)
+  (setq cssm-indent-level 2)
+  (setq css-indent-offset 2)
+  (setq-default indent-tabs-mode nil)
+  (setq cssm-newline-before-closing-bracket t))
+(add-hook 'css-mode-hook 'css-mode-hooks)
+
+;;-----END(file-type-hook Settings)-----
 
 
 
@@ -72,6 +168,9 @@
 
 ;; 行末の空白をハイライト
 (setq-default show-trailing-whitespace t)
+
+;;一行ずつスクロールする
+(setq scroll-step 1)
 
 ;;時計を表示
 (display-time-mode 1)
@@ -88,6 +187,9 @@
 ;;hogehoge
 (show-paren-mode 1)
 
+;;Rubyのマジックコメント(# coding: utf-8)の自動出力を抑止
+(setq ruby-insert-encoding-magic-comment nil)
+
 ;;-----END(General Settings)-----
 
 
@@ -96,6 +198,14 @@
 
 ;;折り返しトグルコマンド
 (define-key global-map (kbd "C-c l") 'toggle-truncate-lines)
+;;grep-find
+(define-key global-map (kbd "M-g") 'grep-find)
+;;コピーと切り取りのキーバインドを入れ替える
+(define-key global-map (kbd "M-w") 'kill-region)
+(define-key global-map (kbd "C-w") 'kill-ring-save)
+;;org-twbs-export-to-html
+;;org-modeの最高な出力コマンド
+(define-key global-map (kbd "M-p") 'org-twbs-export-to-html)
 
 ;;-----END(To serve Standard Function to Key-bind)-----
 
@@ -126,13 +236,8 @@
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (egg rinari ctags inf-ruby ruby-block ruby-electric package-utils elscreen wgrep auto-complete helm multi-term htmlize))))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
+    (rainbow-mode magit xclip web-mode ox-twbs haml-mode egg rinari ctags inf-ruby ruby-block ruby-electric package-utils elscreen wgrep auto-complete helm multi-term htmlize))))
+
 
 ;;Helmの設定
 (require 'helm-config)
@@ -180,8 +285,89 @@
 
 ;;hown(メモ機能)のインストールは保留
 
-;;GitフロントエンドEggの設定
+;;GitフロントエンドEggの設定(こいつ使っていない)
 (when (executable-find "git")
   (require 'egg nil t))
 
+
+;;magitの設定
+(global-set-key (kbd "C-x g") 'magit-status)
+
+
+;;multi-termの設定
+(when (require 'multi-term nil t)
+  ;;使用するシェルを指定
+  (setq multi-term-program "/bin/bash"))
+
+
+;;Settings of eww
+;;key-bindingsの追加
+;(define-key eww-mode-map "r" 'eww-reload)
+;(define-key eww-mode-map "c 0" 'eww-copy-page-url)
+;(define-key eww-mode-map "p" 'scroll-down)
+;(define-key eww-mode-map "n" 'scroll-up)
+;;背景色の設定
+(defvar eww-disable-colorize t)
+(defun shr-colorize-region--disable (orig start end fg &optional bg &rest _)
+  (unless eww-disable-colorize
+    (funcall orig start end fg)))
+(advice-add 'shr-colorize-region :around 'shr-colorize-region--disable)
+(advice-add 'eww-colorize-region :around 'shr-colorize-region--disable)
+(defun eww-disable-color ()
+  "eww で文字色を反映させない"
+  (interactive)
+  (setq-local eww-disable-colorize t)
+  (eww-reload))
+(defun eww-enable-color ()
+  "eww で文字色を反映させる"
+  (interactive)
+  (setq-local eww-disable-colorize nil)
+  (eww-reload))
+;;defaultの検索エンジンをgoogleにする
+(setq eww-search-prefix "http://www.google.co.jp/search?q=")
+
+
 ;;-----END(Settings of ELPA, melpa, and so on...)-----
+
+
+
+;;-----START(Self-making commands)-----
+;;(defun insert-title-format ()
+;;  "現在バッファに----------を表示し、ポイントをその真ん中に移動する。"
+;;  (interactive)
+;;  (progn
+;;    (insert "----------")
+;;    (goto-char (- (point) 5))))
+;;org-modeのフォーマットに合わせた方が可読性が上がるため、上記はコメントアウト
+(defun insert-title-format ()
+  "現在バッファに#+TITLE: と、見出し1を挿入し、カーソルを:の後ろに移動する。"
+  (interactive)
+  (insert "#+TITLE: ")
+  (newline)
+  (insert "#+OPTIONS: ^:{}")
+  (newline)
+  (insert "* ")
+  (previous-line)
+  (previous-line)
+  (move-end-of-line 1))
+(define-key global-map (kbd "C-t") 'insert-title-format)
+;;C-t runs the command transpose-chars (found in global-map) for the defult.
+
+(defun insert-quoted-comma ()
+  "現在バッファに\"\",を表示し、ポイントを\"\"の間に移動する。"
+  (interactive)
+  (progn
+    (insert "\"\",")
+    (goto-char (- (point) 2))))
+(define-key global-map (kbd "C-q") 'insert-quoted-comma)
+;;C-q runs the command quoted-insert for the default.
+
+;; insert binding.pry
+(defun insert-binding-pry ()
+  "railsデバッグ用"
+  (interactive)
+  (insert "binding.pry")
+  (move-end-of-line 1))
+(define-key global-map (kbd "C-x p") 'insert-binding-pry)
+
+;;-----START(Self-making commands)-----
