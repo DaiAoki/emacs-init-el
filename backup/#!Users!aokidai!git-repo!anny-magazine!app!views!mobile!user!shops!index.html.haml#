@@ -1,0 +1,89 @@
+- general_tags "ギフトショップ"
+- add_breadcrumb "TOP", root_path
+- add_breadcrumb "ギフトショップ" , shops_path
+
+
+.shops-background
+  .shops-nav
+    = link_to recent_shops_path, class: "shops-nav-link", onclick: "ga(\'send\', \'event\', \'shop_header\' ,\'history');" do
+      = image_tag("user/shops-nav-history.png", class: "shops-nav-link-img")
+      .shops-nav-link-text 履歴
+    = link_to new_shops_path, class: "shops-nav-link", onclick: "ga(\'send\', \'event\', \'shop_header\' ,\'new');" do
+      = image_tag("user/shops-nav-new.png", class: "shops-nav-link-img")
+      .shops-nav-link-text 新着
+    = link_to popular_shops_path, class: "shops-nav-link", onclick: "ga(\'send\', \'event\', \'shop_header\' ,\'popular');" do
+      = image_tag("user/shops-nav-popular.png", class: "shops-nav-link-img")
+      .shops-nav-link-text 人気
+    = link_to searches_path, class: "shops-nav-link", onclick: "ga(\'send\', \'event\', \'shop_header\' ,\'search');" do
+      = image_tag("user/shops-nav-search.png", class: "shops-nav-link-img")
+      .shops-nav-link-text 検索
+  -# NOTE カテゴリ未実装のため、コメントアウト
+    = link_to root_path, class: "shops-nav-link" do
+      = image_tag("user/shops-nav-category.png", class: "shops-nav-link-img")
+      .shops-nav-link-text カテゴリ
+
+  .shops-breadcrumbs
+    = render_breadcrumbs builder: ::CustomBreadcrumbsBuilder
+
+  .js-shops-slick-item
+    - @banners.each do |banner|
+      - if banner.link_to_url
+        = link_to "#{root_url.chop!}#{banner.link_to_url}" do
+          = image_tag banner.image.url
+  = render 'user/recently_check_products'
+  = render 'user/new_products'
+  = render 'user/popular_products'
+
+
+  .shops-category
+    .shops-category__heading
+      %span 贈るシーンで探す (記事・商品)
+      .shops-category__arrow
+    .shops-category__list
+      - @categories.each_with_index do |category, i|
+        = link_to shops_category_path(slug: category.slug), class: "shops-category__item",onclick: "ga(\'send\', \'event\', \'category_product\' ,\'#{category.name}\');" do
+          =image_tag("user/shops-category-#{i}.png", class: "shops-category__icon")
+          %span.shops-category__text= category.name
+      %a.shops-category__item
+
+  .shops-group
+    .shops-group__heading
+      %span アイテムで探す (商品)
+      .shops-group__arrow
+    .shops-group__list
+      - @groups.each_with_index do |group, i|
+        = link_to shops_group_path(group.id), class: "shops-group__item" do
+          = image_tag(group.icon_image.thumbnail.url, class: "shops-group__icon")
+          %span.shops-group__text= group.name
+
+  - if @hot_keywords.present?
+    %ul.shops-keywords
+      .shops-keywords__heading
+        %span キーワードから探す (記事)
+      .shops-keywords__content
+        - @hot_keywords.each do |keyword|
+          %li.shops-keywords__content__item
+            = link_to "##{keyword.name}", keyword_path(keyword.id)
+      .shops-keywords__footer
+        = link_to "> キーワードをもっと見る", keywords_path
+
+  .shops-group__question
+    = link_to "Q&A", faq_index_path(anchor: "faq_question"), class: "header__right-content-ask"
+
+
+  .linkset-container.linkset-container--entries
+    .linkset-container__title 新着記事
+    %ul.linkset-container__list.linkset-container--entries__list
+      - @updated_articles.take(3).each_with_index do |article, index|
+        %li.linkset-container__item.linkset-container--entries__item{onclick:"ga('send', 'event', 'article_tap','S',#{article.id})"}
+          = render partial: 'user/articleset', locals: {article: article, ga_action: "new"}
+    .full-button
+      = link_to '新着記事をもっと見る', '?page=2', class: "full-button__text",onclick: "ga('send', 'event', 'pagenation_article', 'more');"
+
+  - if @popular_articles.present?
+    .linkset-container.linkset-container--entries
+      .linkset-container__title 人気記事
+      %ul.linkset-container__list.linkset-container--entries__list
+        - @popular_articles.take(3).each do |article|
+          %li.linkset-container__item.linkset-container--entries__item{onclick:"ga('send', 'event', 'article_tap','#{article.id}')"}
+            = render partial: 'user/articleset', locals: { article: article , ga_action: "popular"}

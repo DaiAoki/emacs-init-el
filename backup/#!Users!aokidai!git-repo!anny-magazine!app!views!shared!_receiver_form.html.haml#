@@ -1,0 +1,46 @@
+= f.fields_for @receiver do |t|
+  .payment-form__header お届け先
+  .payment-form__group
+    = t.text_field :name, class: "payment-form__input validate[required]", id: "js-todokesaki-name", placeholder: "お名前"
+    .payment-form__event-button#js-input-same-name ご購入者と同じ
+  .payment-form__group
+    = t.telephone_field :phone_number, class: "payment-form__input validate[required]", id: 'receiver_phone_number', placeholder: "電話番号"
+    .payment-form__event-button#js-input-same-phone_number ご購入者と同じ
+  .payment-form__group#js-zip-code-alert
+    .u-pl-10= @receiver.zip_code
+  .payment-form__group#js-prefecture-alert
+    .u-pl-10= @receiver.try(:prefecture).try(:name)
+    .payment-form__label 都道府県
+  .payment-form__group
+    = t.text_field :address1, class: "payment-form__input p-pocality p-street-address validate[required]", id: "address", placeholder: "住所1（市区町村・番地等）"
+  .payment-form__group
+    = t.text_field :address2, class: "payment-form__input p-extended-address", placeholder: "住所2（マンション・ビル名・部屋番号等）"
+
+  .payment-form__header=@gift_letter_order.product.store.name
+  .payment-form__product-image-area.u-mt-small
+    =image_tag(@gift_letter_order.product.image_url, class: "payment-form__product-image")
+    .payment-form__product-title.u-mt-small
+      =@gift_letter_order.product.title
+  .payment-form__group
+    = t.select :delivery_date, [], {}, { id: 'js-arrival-date-select', class: "payment-form__select--black", onfocus: "ga('send', 'event', 'day_tap', 'day_tap');", onblur: "ga('send', 'event', 'day_finish', $('#validation-form [id=receiver_delivery_date]').val());"} do
+      = render 'components/arrival_date_options', dates: @gift_letter_order.product.decorate.arrival_date_options_for_select(@receiver.prefecture_id, @gift_letter_order.product_sku_id), selected: @receiver.delivery_date.try(:strftime, '%Y/%m/%d') || Receiver::DELIVERY_DATE_ANY_SYMBOL
+    .payment-form__label 日
+  .payment-form__group
+    = t.select :delivery_time, options_for_select(@delivery_times_for_form, selected: @receiver.delivery_time), {}, class: "payment-form__select--black"
+    .payment-form__label　時間帯
+
+  - if @order_extra_infos.present?
+    .payment-form__header 必ずお答えください
+    .payment-form__group--fullwidth--no-border
+      = f.fields_for :order_extra_infos do |ex|
+        = ex.text_area :description, {rows:10, class: "payment-form__text-area"}
+        = ex.hidden_field :extra_info_id
+
+:javascript
+  $('#js-zip-code-alert').on("click", function() {
+    alert("郵便番号は変更できません！");
+  });
+
+  $('#js-prefecture-alert').on("click", function() {
+    alert("都道府県は変更できません！");
+  });

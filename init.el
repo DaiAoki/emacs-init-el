@@ -353,6 +353,15 @@
 (define-key global-map (kbd "C-t") 'insert-title-format)
 ;;C-t runs the command transpose-chars (found in global-map) for the defult.
 
+;;C-z g
+(defun insert-onclick-ga ()
+  "GAタグの埋め込み"
+  (interactive)
+  (progn
+    (insert "onclick: \"ga('send', 'event', '', '')\"")
+    (goto-char (- (point) 7))))
+(define-key global-map (kbd "C-z g") 'insert-onclick-ga)
+
 (defun insert-quoted-comma ()
   "現在バッファに\"\",を表示し、ポイントを\"\"の間に移動する。"
   (interactive)

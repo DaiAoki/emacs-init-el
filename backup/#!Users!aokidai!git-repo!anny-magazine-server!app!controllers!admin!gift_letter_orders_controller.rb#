@@ -1,0 +1,299 @@
+class Admin::GiftLetterOrdersController < Admin::ApplicationController
+  require 'kconv'
+  prepend_before_action :record_log, only: :update
+  before_action :restrict_remote_ip
+  before_action :set_gift_letter_order, only: %w(edit update show cancel supplement update_comments resend_email)
+  before_action :set_gift_letter_orders, only: :index
+  before_action :set_current_company_user, only: %w(update download plural_download all_download cancel import supplement)
+  before_action :set_comments, only: %w(update show edit)
+
+  def index
+    @comment_num = GiftLetterOrderComment.waiting_order_count_by_company(current_company)
+  end
+
+  def comments
+    @only_waiting = params[:only_waiting] == 'false' ? false : true
+    @gift_letter_orders = GiftLetterOrderComment.order_list(current_company, params[:page], only_waiting: @only_waiting)
+    if current_company.admin?
+      @gift_letter_orders = @gift_letter_orders.includes(product: :company).includes(receiver: :prefecture)
+    else
+      @gift_letter_orders = @gift_letter_orders.includes(:product).includes(receiver: :prefecture)
+    end
+  end
+
+  def show; end
+
+  def edit
+    @should_display_extra_info = @gift_letter_order.order_extra_infos.present? && @gift_letter_order.extra_infos.present?
+    @delivery_times_for_form = ReceiverDecorator.delivery_times_for_form
+  end
+
+  def update
+    @gift_letter_order.update!(gift_letter_order_params)
+    redirect_to edit_admin_gift_letter_order_path(@gift_letter_order.id), notice: '更新に成功しました'
+  rescue => e
+    record_log('error', e)
+    redirect_to :back, alert: e.to_s
+  end
+
+  def update_shipping_info
+    gift_letter_order = GiftLetterOrder::Import.already_ordered.find(params[:id])
+    find_by(id: id) = find(id)
+    find_by(unchara: unhbee)
+
+    SELECT
+    *
+    FROM DB.table
+    Where unchara = unhbee
+    ;
+
+    SELECT
+    barTable.id,
+    barTable.name
+    FROM hogeDB.barTable
+    WHERE id = 2
+    ;
+
+    #gift_letter_order = GiftLetterOrder::Import.already_ordered
+    #gift_letter_order = gift_letter_order.find(params[:id])
+    #gift_letter_order = GiftLetterOrder::Import.where.not(shipping_status: 0).find(params[:id])
+    # nishisuke = レシーバ, break_arm = メソッド(関数)
+    broken_nishisuke = nishisuke.break_arm
+    broken_nishisuke.arm
+    => 骨折
+    # 破壊的なメソッド
+    nishisuke.break_arm!
+    nishisuke.arm
+    => 骨折
+
+    class
+
+    BLT.nishisuke.right_arm.shake
+    BLT.nishisuke.right_arm.put_on_head
+    BLT.nishisuke.leg.run
+    BLT.nishisuke.leg.walk
+    pluck(:id, :shipping_status, ...)
+    new_attrs = gift_letter_order_params.merge(shipping_status: GiftLetterOrder.shipping_statuses[:shipped])
+    if gift_letter_order.prepared_at.blank?
+      new_attrs = new_attrs.merge(prepared_at: Time.current)
+    end
+    unless gift_letter_order_params[:sent] == "email"
+      GiftLetterOrder::Import.skip_callback(:save, :after, :send_mail)
+    else
+      GiftLetterOrder::Import.set_callback(:save, :after, :send_mail)
+    end
+    gift_letter_order.update!(new_attrs)
+    redirect_to edit_admin_gift_letter_order_path(gift_letter_order.id), notice: '更新に成功しました'
+  rescue => e
+    record_log('error', e)
+    redirect_to :back, alert: e.to_s
+  end
+
+  def download
+    export_csv(params[:id])
+  end
+
+  def plural_download
+    return redirect_to :back, alert: 'ダウンロードする注文データを１つ以上選択してください' if params[:gift_letter_order_ids].blank?
+    export_csv(params[:gift_letter_order_ids].keys)
+  end
+
+  def all_download
+    export_csv(params[:gift_letter_order_ids])
+  end
+
+  def import
+    GiftLetterOrder::Import.execute!(params[:file].path, current_company.id)
+    redirect_to admin_gift_letter_orders_path, notice: '更新に成功しました'
+  rescue => e
+    record_log('error', e)
+    redirect_to admin_gift_letter_orders_path, alert: e.to_s
+  end
+
+  def cancel
+    return redirect_to :back, alert: 'キャンセル権限がありません' unless current_company.admin?
+    @gift_letter_order = GiftLetterOrder::Payment.find(params[:id])
+    @gift_letter_order.cancel!(@current_company_user)
+    UserMailer.notify_canceled_order(@gift_letter_order).deliver_now
+    redirect_to admin_gift_letter_orders_path, notice: "「注文」と「#{@gift_letter_order.payment_type}決済」のキャンセルに成功しました"
+  rescue => e
+    record_log('error', e)
+    redirect_to :back, alert: "キャンセルができませんでした。Error: #{e.to_s}"
+  end
+
+  def supplement
+    change_item = @receiver.diff_receiver_data(receiver_params)
+    if @receiver.update(receiver_params)
+      if change_item.present?
+        CompanyMailer.notify_change_information(change_item, @gift_letter_order, @current_company_user).deliver_now
+        SlackNotifier.post_message_for_updateting_order_info(change_item, @gift_letter_order, @current_company_user, "#{edit_admin_gift_letter_order_url(@gift_letter_order.id)}")
+      end
+      redirect_to edit_admin_gift_letter_order_path(@gift_letter_order.id), notice: '更新に成功しました'
+    else
+      redirect_to :back, alert: '更新に失敗しました'
+    end
+  end
+
+  def update_comments
+    comment = params[:gift_letter_order_comments][:comment]
+    status = GiftLetterOrderComment.communication_statuses[params[:commit]]
+    status = status.to_i # nil to 0
+    is_success = save_delivery_comment(comment, status)
+    unless is_success
+      return redirect_to :back, alert: '更新に失敗しました'
+    end
+
+    if comment.present?
+      CompanyMailer.notify_change_information(['通信欄'], @gift_letter_order, @current_company_user).deliver_now
+      SlackNotifier.post_message_for_updateting_order_info(['通信欄'], @gift_letter_order, @current_company_user, "#{edit_admin_gift_letter_order_url(@gift_letter_order.id)}")
+    end
+    redirect_to edit_admin_gift_letter_order_path(@gift_letter_order.id), notice: '更新に成功しました'
+  end
+
+  def validate_shipping_code
+    registed_shipping_code = GiftLetterOrder.find_by(shipping_code: params[:shipping_code])
+    if registed_shipping_code.present?
+      render json: registed_shipping_code and return
+    end
+    render json: {id: nil}
+  end
+
+  def resend_email
+
+    if @gift_letter_order.purchase?
+      UserMailer.notify_completion_order_purchase(@gift_letter_order).deliver_now
+    else
+      UserMailer.notify_completion_order_giftletter(@gift_letter_order).deliver_now
+    end
+
+    redirect_to edit_admin_gift_letter_order_path(@gift_letter_order.id), notice: '購入メールの再送に成功しました'
+  end
+
+  private
+
+  def set_gift_letter_order
+    if current_company.admin?
+      @gift_letter_order = GiftLetterOrder.already_ordered.includes(gift_letter_order_comments: [:company_user]).find(params[:id]).decorate
+      @receiver = @gift_letter_order.receiver
+      return
+    end
+
+    gift_letter_order = GiftLetterOrder.already_ordered.includes(gift_letter_order_comments: [:company_user]).find(params[:id]).decorate
+    if gift_letter_order.product.company.id == current_company.id
+      @gift_letter_order = gift_letter_order
+      @receiver = @gift_letter_order.receiver
+    end
+  end
+
+  def set_current_company_user
+    @current_company_user
+  end
+
+  def set_gift_letter_orders
+    # technicaldebt N + 1 Prefecture
+    @gift_letter_orders = GiftLetterOrder::Search.includes(:product_sku, receiver: :prefecture)
+                          .references(:receiver, :product_sku)
+                          .already_selected_by_company(current_company)
+                          .searched(search_params)
+                          .page(params[:page])
+                          .unscope(:order)
+                          .order(order_params)
+                          .per(50).decorate
+  end
+
+  def search_params
+    @search_conditions = params.slice(
+      :exchange_token,
+      :product_title,
+      :name,
+      :receiver_name,
+      :selection_started_at,
+      :selection_ended_at,
+      :sending_started_at,
+      :sending_ended_at,
+      :delivery_date,
+      :delivery_time,
+      :date_presence,
+      :shipping_status,
+      :merchandise_id,
+      :store_name,
+      :company_name
+    ).select { |_, v| v.present? }
+  end
+
+  def order_params
+    return @sort = params[:sort] == nil ? {"selected_at" => "desc"} : {params[:sort][0] => "desc"}
+  end
+
+  def gift_letter_order_params
+    params.require(:gift_letter_order).permit(
+    :shipping_code,
+    :carrier_code,
+    :sent_at,
+    :refund_amount,
+    :name,
+    :email,
+    :sent,
+    :phone_number,
+    order_extra_infos_attributes: [:id, :gift_letter_order_id, :extra_info_id, :description])
+  end
+
+  def receiver_params
+    params.require(:receiver).permit(:name, :email, :phone_number, :zip_code, :address1, :street_number, :address2, :delivery_date, :delivery_time, :prefecture_id)
+  end
+
+  def save_delivery_comment(comment, status)
+    if current_company.admin?
+      put_comment_by_admin(comment, status)
+    else # partner
+      create_comment_by_partner(comment)
+    end
+  end
+
+  def put_comment_by_admin(comment, status)
+    if comment.empty?
+      lc = @gift_letter_order.latest_comment
+      if lc.nil?
+        return false
+      else
+        return lc.update(communication_status: status)
+      end
+    end
+
+    order_comment = GiftLetterOrderComment.new(
+      gift_letter_order_id: @gift_letter_order.id,
+      comment: comment,
+      company_user_id: @current_company_user.id,
+      communication_status: status,
+    )
+    order_comment.save
+  end
+
+  def create_comment_by_partner(comment)
+    order_comment = GiftLetterOrderComment.new(
+      gift_letter_order_id: @gift_letter_order.id,
+      comment: comment,
+      company_user_id: @current_company_user.id,
+      communication_status: GiftLetterOrderComment.communication_statuses[:anny_reply_waiting],
+    )
+    order_comment.save
+  end
+
+  def set_comments
+    @comments = @gift_letter_order.gift_letter_order_comments
+  end
+
+  def export_csv(ids)
+    csv = GiftLetterOrder::Export.csv(ids, @current_company_user.company.character_code)
+    GiftLetterOrder.where(id: ids).each do |g|
+      if g.before_download? && @current_company_user.company_id == g.product.company.id
+        g.before_shipping!
+      end
+    end
+
+    send_data csv, type: 'text/csv; charset=shift_jis', filename: 'gift_letter_order.csv', disposition: 'attachment'
+  rescue => e
+    logger.error e.message
+    logger.error e.backtrace_locations
+  end
+end

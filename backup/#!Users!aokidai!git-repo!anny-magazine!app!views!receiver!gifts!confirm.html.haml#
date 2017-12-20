@@ -1,0 +1,69 @@
+= content_for :title do
+  Anny | お届け先を確認する
+
+= render 'receiver/components/layout/nav', now: 2
+
+%p.receiver-page-gift-common__sentence
+  入力いただいた内容をご確認いただき宜しければ 
+  %br
+  お届け指定の［ 完了 ］をお願いします。
+  %br
+  ＊メールアドレスに確認メールをお送りします。
+
+.receiver-confirm.u-mb-20
+  .receiver-confirm__group
+    .receiver-confirm__title ギフト選択
+    .receiver-confirm__content= @product_sku.product.title
+  .receiver-confirm__group
+    .receiver-confirm__title お届け先
+    .receiver-confirm__content
+      .receiver-confirm__label お名前
+      .receiver-confirm__input= @gift_receiver_form.name
+    .receiver-confirm__content
+      .receiver-confirm__label メールアドレス
+      .receiver-confirm__input= @gift_receiver_form.email
+    .receiver-confirm__content
+      .receiver-confirm__label 電話番号
+      .receiver-confirm__input= @gift_receiver_form.phone_number
+    .receiver-confirm__content
+      .receiver-confirm__label 郵便番号
+      .receiver-confirm__input= @gift_receiver_form.zip_code
+    .receiver-confirm__content
+      .receiver-confirm__label 都道府県
+      .receiver-confirm__input= Prefecture.find(@gift_receiver_form.prefecture_id).name
+    .receiver-confirm__content
+      .receiver-confirm__label 住所1
+      .receiver-confirm__input= @gift_receiver_form.address1
+    - if @gift_receiver_form.address2.present?
+      .receiver-confirm__content
+        .receiver-confirm__label 住所2
+        .receiver-confirm__input= @gift_receiver_form.address2
+    %small= Receiver::EXEMPTION_MESSAGE
+  .receiver-confirm__group
+    .receiver-confirm__title お届け希望日・時間帯
+    .receiver-confirm__content
+      .receiver-confirm__label お届け日
+      .receiver-confirm__input= t(@gift_receiver_form.delivery_date)
+    .receiver-confirm__content
+      .receiver-confirm__label お届け時間帯
+      .receiver-confirm__input= t(@gift_receiver_form.delivery_time)
+  - if @gift_receiver_form.extra_info.present?
+    .receiver-confirm__group
+      .receiver-confirm__title その他
+      .receiver-confirm__text-area= @gift_receiver_form.extra_info
+
+= form_for(@gift_receiver_form, url: receive_receiver_gift_path(@gift_letter_order.exchange_token)) do |f|
+  = f.hidden_field :product_sku_id
+  = f.hidden_field :name
+  = f.hidden_field :phone_number
+  = f.hidden_field :email
+  = f.hidden_field :email_confirmation
+  = f.hidden_field :zip_code
+  = f.hidden_field :prefecture_id
+  = f.hidden_field :address1
+  = f.hidden_field :address2
+  = f.hidden_field :delivery_date
+  = f.hidden_field :delivery_time
+  = f.hidden_field :extra_info
+  = f.submit '入力画面に戻る', formaction: form_receiver_gift_path(@gift_letter_order.exchange_token), class: 'button-link u-mrl-auto '
+  = f.submit '完了する', class: 'button button--style-white button--middle u-mrl-auto u-mt-10 u-mb-50'

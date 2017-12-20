@@ -1,0 +1,4 @@
+auto-install.elのkill-bufferを、kill-buffer nilに書き換えた。
+→anythingのインストールのため。
+
+anythingの新種であるHelmをインストール。

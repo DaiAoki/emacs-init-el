@@ -1,0 +1,20 @@
+*** /Users/aokidai/.emacs.d/init.el	2017-02-15 23:45:11.000000000 +0900
+--- /Users/aokidai/.emacs.d/init.el~	2017-02-15 23:20:22.000000000 +0900
+***************
+*** 52,66 ****
+  
+  ;;-----START(General Settings)-----
+  
+- ;; yes-noをy-nに置き換え
+- (fset 'yes-or-no-p 'y-or-n-p)
+- 
+- ;; M-xでコマンドを入力するときに候補を表示する
+- (icomplete-mode 1)
+- 
+- ;; 行末の空白をハイライト
+- (setq-default show-trailing-whitespace t)
+- 
+  ;;時計を表示
+  (display-time-mode 1)
+  
+--- 52,57 ----

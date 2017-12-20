@@ -1,0 +1,207 @@
+Mclass GiftLetterOrder < ActiveRecord::Base
+  has_one :receiver, dependent: :destroy
+  has_one :user_notification, dependent: :nullify
+  has_one :discount_coupon, dependent: :nullify
+  has_many :company_notifications, dependent: :destroy
+  has_many :order_extra_infos, dependent: :destroy
+  belongs_to :user
+  belongs_to :product
+  belongs_to :product_sku
+  belongs_to :gift_letter_theme
+
+  validates :name, presence: true
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, format: { with: VALID_EMAIL_REGEX }
+  validates :phone_number, presence: true
+
+  accepts_nested_attributes_for :order_extra_infos, reject_if: :all_blank, allow_destroy: true
+
+  audited except: %i(comment remote_address request_uuid associated_id associate_type)
+
+  after_create :reduce_product_sku_quantity, if: proc { |order|
+    order.purchase? && order.product.need_stock
+  }
+
+  mount_uploader :letter_thumbnail, LetterThumbnailUploader
+
+  # Notice: Web決済のためnullを許可. anny-magazine-serverの方では有効
+  # validates :user_id, presence: true
+
+  delegate :title, to: :product
+  delegate :price, to: :product
+  delegate :wholesale_price, to: :product
+  delegate :customer_token, to: :user
+
+  enum shipping_status: {
+    before_order: 0,
+    before_selection: 1,
+    before_download: 2,
+    before_shipping: 3,
+    shipped: 4,
+    canceled: 5
+  }
+
+  enum order_type: {
+    gift_letter: 0,
+    purchase: 1
+  }
+
+  enum carrier_code: {
+    jp_post: 10,
+    yamato: 20,
+    sagawa: 30,
+    no_carrier: 99
+  }
+
+  enum payment_type: {
+    webpay: 0,
+    amazon_pay: 1,
+    payjp: 2
+  }
+
+  VALID_MONTHS = 3
+  SHIPPING_STATUS_IN_JP = {
+    'before_selection'  => '指定前',
+    'before_download'   => 'ダウンロード前',
+    'before_shipping'   => '配送前',
+    'shipped'           => '配送手配済み',
+    'canceled'          => 'キャンセル'
+  }.freeze
+
+  scope :already_ordered, -> { where.not(shipping_status: [0, 5]) }
+  scope :active, ->(user_id) { where(user_id: user_id).already_ordered }
+  scope :count_before_selection_product, ->(product_id) { GiftLetterOrder.where(product_id: product_id).valid.before_selection.size }
+  scope :valid, -> { where("expired_at > ?", Time.now) }
+
+  def notify_company
+    company_notifications.create!(message: 'ギフトが新規注文されました', company_id: product.store.company_id)
+  end
+
+
+  def cancel!
+    fail ArgumentError, '商品の配送準備が進んでいるためキャンセル出来ません。' unless (before_download? && purchase?) || (before_selection? && gift_letter?)
+    fail ArgumentError, 'ギフトの有効期限を過ぎています。' if purchased_at <= (Time.current - 89.days)
+    error_handling do
+      # payment_type enumでキャンセル方法を分岐
+      if webpay?
+        # TODO: webpayを使った注文が全て無くなり次第、apiコードを削除
+        webpay = WebPay.new(Settings.webpay_secret_key)
+        webpay.charge.refund(id: webpay_token)
+      elsif amazon_pay?
+        amazon_client = PayWithAmazon::Client.new(
+          Settings.amazon_pay.seller_id,
+          Settings.amazon_pay.access_key,
+          Settings.amazon_pay.secret_key,
+          region: :jp,
+          currency_code: 'JPY',
+          sandbox: (!Rails.env.production?)
+        )
+        res = amazon_client.refund(
+          amazon_authorize_token,
+          "cancel-#{SecureRandom.hex(8)}",
+          amount
+        )
+        if !res.success
+          fail Error, "cencel failed"
+        end
+      elsif payjp?
+        Payjp.api_key = Settings.payjp.secret_key
+        Payjp::Charge.retrieve(payjp_token).refund
+      elsif stripe?
+        Stripe.api_key ||= Settings.stripe.secret_key
+        Stripe::Refund.create(charge: stripe_token)
+      else
+        logger.error('Unknown payment_type!!')
+      end
+      increase_product_sku_quantity
+      canceled!
+    end
+  end
+
+  def has_letter?
+    ios_order? && gift_letter?
+  end
+
+  def ios_order?
+    receiver_type != Transaction::RECEIVER_TYPE_WEB_PAYMENT
+  end
+
+
+  # ここにアプデ項目追加すべきかも
+  def select_sku!(sku)
+    update!(
+      product_sku_id:  sku.id,
+      selected_at:     Time.current,
+      shipping_status: 'before_download',
+    )
+  end
+
+
+
+  def unavailable_reason
+    return 'ギフトの受け取り期限が過ぎています' if expired_at < Time.current
+    return 'このギフトはキャンセルされたため受け取れません' if canceled?
+    return 'このギフトは既に受け取られています' if !before_selection?
+    ''
+  end
+
+  def sku_selected?
+    before_download? || before_shipping? || shipped?
+
+  end
+
+  private
+
+  def error_handling
+    begin
+      yield if block_given?
+    rescue WebPay::ErrorResponse::ErrorResponseError => e
+      case e.data.error.caused_by
+      when 'buyer'
+        logger.error(e.data.error.message)
+      when 'insufficient', 'missing'
+        error = e.data.error
+        logger.error("Invalid request error: message:#{error.message} " \
+                     "caused_by:#{error.caused_by} " \
+                     "param:#{error.param} " \
+                     "type:#{error.type}")
+      when 'service'
+        logger.error("WebPay API error: message:#{e.data.error.message}")
+      else
+        error = e.data.error
+        logger.error("Unknown error response: message:#{error.message} " \
+                     "caused_by:#{error.caused_by} " \
+                     "type:#{error.type}")
+      end
+      raise e
+    rescue WebPay::ApiError => e
+      logger.error("WebPay API request is not completed: #{e}")
+      raise e
+    rescue Payjp::CardError => e
+      body = e.json_body
+      err  = body[:error]
+      logger.error("Payjp card error: " \
+                   "Status is: #{e.http_status}" \
+                   "Type is: #{err[:type]}" \
+                   "Code is: #{err[:code]}" \
+                   "Param is: #{err[:param]}" \
+                   "Message is: #{err[:message]}")
+      # TODO Is it OK that not raising error here?
+    rescue Payjp::APIConnectionError => e
+      logger.error("Payjp API request is not completed: #{e}")
+      raise e
+    rescue Payjp::PayjpError => e
+      logger.error("Payjp generic error: #{e}")
+      raise e
+    end
+  end
+
+  def reduce_product_sku_quantity
+    product_sku.reduce_quantity
+  end
+
+  def increase_product_sku_quantity
+    product_sku.increase_quantity if purchase?
+  end
+
+end
