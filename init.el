@@ -190,6 +190,12 @@
 ;;Rubyのマジックコメント(# coding: utf-8)の自動出力を抑止
 (setq ruby-insert-encoding-magic-comment nil)
 
+;;'¥' -> '\'
+(define-key global-map [?¥] [?\\])
+
+;;ignore error sound and flash
+(setq ring-bell-function 'ignore)
+
 ;;-----END(General Settings)-----
 
 
