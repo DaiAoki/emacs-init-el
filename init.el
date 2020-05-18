@@ -1,11 +1,12 @@
 ;;-----START(処理系の追加、ロードパスの追加、auto-installの設定)-----
+;; slimeこっちのPCで使える準備していないから、設定をコメントアウトする
 ;; clispをデフォルトのCommon Lisp処理系に設定
-(setq inferior-lisp-program "/usr/local/bin/clisp")
+;;(setq inferior-lisp-program "/usr/local/bin/clisp")
 ;; ~/.emacs.d/slimeをload-pathに追加
-(add-to-list 'load-path (expand-file-name "~/.emacs.d/slime"))
+;;(add-to-list 'load-path (expand-file-name "~/.emacs.d/slime"))
 ;; SLIMEのロード
-(require 'slime)
-(slime-setup '(slime-repl slime-fancy slime-banner))
+;;(require 'slime)
+;;(slime-setup '(slime-repl slime-fancy slime-banner))
 
 ;;ロードパスを追加する。
 (when (> emacs-major-version 23)
@@ -20,16 +21,17 @@
 	(if (fboundp 'normal-top-level-add-subdirs-to-load-path)
 	    (normal-top-level-add-subdirs-to-load-path))))))
 ;;引数のディレクトリとそのサブディレクトリをload-pathに追加。
-(add-to-load-path "elisp" "conf" "public_repos")
+(add-to-load-path "elisp")
 ;;ここにlandoflispのファイルとか、elpa,etc,infoも加えた方がいいかも。
 
 ;;C sourceのディレクトリを指定
-(setq find-function-C-source-directory "~/Library/Caches/Homebrew/mituharu-emacs-mac-892fa7b2501a/src")
+;;(setq find-function-C-source-directory "~/Library/Caches/Homebrew/mituharu-emacs-mac-892fa7b2501a/src")
 
 
 ;;Package.Elの設定
 ;;M-x package-list-packages
 (when (require 'package nil t)
+  ;;パッケージをインストールする時以外は、基本的に速度のためにコメントアウトしておく
   ;;パッケージリポジトリにMarmaladeと開発者運営のELPAを追加
   (add-to-list 'package-archives
 	       '("marmalade" . "http://marmalade-repo.org/packages/"))
@@ -41,15 +43,16 @@
   (package-initialize))
 
 ;;auto-installの設定
-(when (require 'auto-install nil t)
+;;(when (require 'auto-install nil t)
+  ;;パッケージをインストールする時以外は、基本的に速度のためにコメントアウトしておく
   ;;インストールディレクトリを設定する
-  (setq auto-install-directory "~/.emacs.d/elisp/")
+  ;;(setq auto-install-directory "~/.emacs.d/elisp/")
   ;;EmacsWikiに登録されているelispの名前を取得する
-  (auto-install-update-emacswiki-package-name t)
+  ;;(auto-install-update-emacswiki-package-name t)
   ;;必要であればプロキシの設定をする。
   ;;(setq url-proxy-services '(("http" . "localhost:8339")))
   ;;install-elispの関数を利用可能にする。
-  (auto-install-compatibility-setup))
+  ;;(auto-install-compatibility-setup))
 
 ;;-----END(処理系の追加、ロードパスの追加、auto-installの設定)-----
 
@@ -89,6 +92,24 @@
 (add-to-list 'auto-mode-alist '("\\.js.erb$" . js-mode))
 ;;.haml拡張子のファイルを開いた際に、haml-modeがフックされるように設定
 (add-to-list 'auto-mode-alist '("\\.haml$" . haml-mode))
+;;React用
+;;(add-to-list 'auto-mode-alist '(".*\\.js\\'" . rjsx-mode))
+(add-to-list 'auto-mode-alist '(".*\\.js[x]?$" . rjsx-mode))
+(add-hook 'rjsx-mode-hook
+          (lambda ()
+            (setq indent-tabs-mode nil) ;;インデントはタブではなくスペース
+            (setq js-indent-level 2) ;;スペースは２つ、デフォルトは4
+            (setq js2-strict-missing-semi-warning nil))) ;;行末のセミコロンの警告はオフ
+;;.yml, .yaml拡張子のファイルを開いた際に、yaml-modeがフックされるように設定
+(require 'yaml-mode)
+(add-to-list 'auto-mode-alist '("\\.yml\\'" . yaml-mode))
+(require 'yaml-mode)
+(add-to-list 'auto-mode-alist '("\\.yaml\\'" . yaml-mode))
+(require 'slim-mode)
+(add-hook 'slim-mode-hook
+          '(lambda ()
+             ;; C-x C-i からの左右インデント幅を slim-mode のインデント幅に合わせる
+             (setq tab-width slim-indent-offset)))
 ;;JavaScriptモードでのインデントの幅をスペース二個分に修正(デフォルトは4個)
 (add-hook 'js-mode-hook
 	  (lambda ()
@@ -96,12 +117,37 @@
 	    (setq js-indent-level 2)))
 ;;Reactを書く際に、.jsや.jsxはweb-modeで編集するように設定(web-modeの細かな設定も記述)
 ;; .js, .jsx を web-mode で開く
-(add-to-list 'auto-mode-alist '("\\.js[x]?$" . web-mode))
+;;(add-to-list 'auto-mode-alist '("\\.js[x]?$" . web-mode))
 ;; .scssでもweb-modeで開く
 (add-to-list 'auto-mode-alist '("\\.sass$" . web-mode))
+;; .htmlでweb-modeを有効にする
+(add-to-list 'auto-mode-alist '("\\.html$" . web-mode))
 ;; 拡張子 .js でもJSX編集モードに
-(setq web-mode-content-types-alist
-      '(("jsx" . "\\.js[x]?\\'")))
+;;(setq web-mode-content-types-alist
+      ;;'(("jsx" . "\\.js[x]?\\'")))
+
+;;typescript関連
+(defun setup-tide-mode ()
+  (interactive)
+  (tide-setup)
+  (flycheck-mode +1)
+  (setq flycheck-check-syntax-automatically '(save mode-enabled))
+  (eldoc-mode +1)
+  (tide-hl-identifier-mode +1)
+  (company-mode +1))
+(setq company-tooltip-align-annotations t)
+(setq typescript-indent-level 2)
+(add-hook 'before-save-hook 'tide-format-before-save)
+(add-hook 'typescript-mode-hook #'setup-tide-mode)
+;;TSX
+(require 'flycheck)
+(add-to-list 'auto-mode-alist '("\\.tsx\\'" . web-mode))
+(add-hook 'web-mode-hook
+          (lambda ()
+            (when (string-equal "tsx" (file-name-extension buffer-file-name))
+              (setup-tide-mode))))
+(flycheck-add-mode 'typescript-tslint 'web-mode)
+
 
 ;; インデント
 (add-hook 'web-mode-hook
@@ -114,6 +160,8 @@
              (setq indent-tabs-mode nil)
              (setq tab-width 2)
           ))
+;; ハイライト
+(setq web-mode-enable-current-element-highlight t)
 ;; 色
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
@@ -133,9 +181,10 @@
  '(web-mode-html-tag-face ((t (:foreground "#4A8ACA"))))
  '(web-mode-server-comment-face ((t (:foreground "#587F35")))))
 ;;閉じタグ関連
-(setq web-mode-auto-close-style 1)
-(setq web-mode-tag-auto-close-style t)
+(setq web-mode-auto-close-style 2)
+(setq web-mode-tag-auto-close-style 2)
 (setq web-mode-enable-auto-pairing t)
+(setq web-mode-enable-auto-closing t)
 
 ;;rainbow-mode設定
 (require 'rainbow-mode)
@@ -242,7 +291,7 @@
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (rainbow-mode magit xclip web-mode ox-twbs haml-mode egg rinari ctags inf-ruby ruby-block ruby-electric package-utils elscreen wgrep auto-complete helm multi-term htmlize))))
+    (company typescript tide lsp-mode graphql-mode docker docker-compose-mode dockerfile-mode php-mode markdown-mode vue-html-mode vue-mode rjsx-mode slim-mode coffee-mode xpm csv-mode rainbow-mode magit xclip web-mode ox-twbs haml-mode egg rinari ctags inf-ruby ruby-block ruby-electric package-utils elscreen wgrep auto-complete helm multi-term htmlize))))
 
 
 ;;Helmの設定
@@ -317,8 +366,8 @@
 (defun shr-colorize-region--disable (orig start end fg &optional bg &rest _)
   (unless eww-disable-colorize
     (funcall orig start end fg)))
-(advice-add 'shr-colorize-region :around 'shr-colorize-region--disable)
-(advice-add 'eww-colorize-region :around 'shr-colorize-region--disable)
+;;(advice-add 'shr-colorize-region :around 'shr-colorize-region--disable)
+;;(advice-add 'eww-colorize-region :around 'shr-colorize-region--disable)
 (defun eww-disable-color ()
   "eww で文字色を反映させない"
   (interactive)
@@ -331,7 +380,10 @@
   (eww-reload))
 ;;defaultの検索エンジンをgoogleにする
 (setq eww-search-prefix "http://www.google.co.jp/search?q=")
-
+(require 'docker)
+(require 'dockerfile-mode)
+(add-to-list 'auto-mode-alist '("Dockerfile\\'" . dockerfile-mode))
+(require 'docker-compose-mode)
 
 ;;-----END(Settings of ELPA, melpa, and so on...)-----
 
@@ -385,4 +437,14 @@
   (move-end-of-line 1))
 (define-key global-map (kbd "C-x p") 'insert-binding-pry)
 
+;; insert comma to sql result
+(defun insert-comma-to-sql-query-result ()
+  "SQL実行結果に対して、カンマを付与する。"
+  (interactive)
+  (progn
+    (insert ",")
+    (next-line)
+    (end-of-line)
+    ))
+(define-key global-map (kbd "C-x ,") 'insert-comma-to-sql-query-result)
 ;;-----START(Self-making commands)-----
